@@ -1,14 +1,10 @@
 package ninja
 
-type Ninja struct {
-	ID              int
-	Name            string
-	Weapon          string
-	Acquired        bool
-	Eliminated      bool
-	Weapon_Strength float64
-	Health          float64
-}
+import (
+	"encoding/json"
+	"io/ioutil"
+	"os"
+)
 
 const (
 	ATTACK_PAUSE         int     = 3000
@@ -71,3 +67,44 @@ const (
 	Resp_Attack_Attempt_Max Response = 300
 	Resp_Attack_Adjustment  Response = 0
 )
+
+type TargetNinja struct {
+	Name            string  `json:"name"`
+	Health          float64 `json:"health"`
+	Weapon          string  `json:"weapon"`
+	Weapon_Strength float64 `json:"weapon_strength"`
+	Eliminated      bool    `json:"eliminated"`
+}
+
+type SuperNinja struct {
+	Name            string  `json:"name"`
+	Health          float64 `json:"health"`
+	Weapon          string  `json:"weapon"`
+	Weapon_Strength float64 `json:"weapon_strength"`
+	Eliminated      bool    `json:"eliminated"`
+}
+
+type NinjaFile struct {
+	SuperNinja SuperNinja    `json:"superninja"`
+	Targets    []TargetNinja `json:"targets"`
+}
+
+func ReadAssignmentFile(fileName string) (*SuperNinja, []TargetNinja, error) {
+	jsonFile, err := os.Open(fileName)
+	defer jsonFile.Close()
+
+	if err != nil {
+		return nil, []TargetNinja{}, err
+	}
+
+	byteValue, err := ioutil.ReadAll(jsonFile)
+	if err != nil {
+		return nil, []TargetNinja{}, err
+	}
+
+	var ninjaFile NinjaFile
+
+	json.Unmarshal(byteValue, &ninjaFile)
+
+	return &ninjaFile.SuperNinja, ninjaFile.Targets, nil
+}
