@@ -2,176 +2,83 @@ package game
 
 import (
 	"log"
-	"sync"
 	"time"
 
 	"github.com/sflewis2970/ninja-game/common"
 	"github.com/sflewis2970/ninja-game/ninja"
 )
 
-const WG_GO_Rountine_Cnt int = 1
-
-var wg sync.WaitGroup
-var once sync.Once
-var targetsSize int = 0
-var nTargetsEliminated int = 0
-var lastIDUsed int = 0
+const waitDuration = 750
 
 func StartGame() {
 	startTime := time.Now()
 
-	superNinja := createNinja("Shawn Lewis", "Sword")
-	log.Println()
+	fileName := "ninja.json"
+	superNinja, targetList, err := ninja.ReadAssignmentFile(fileName)
+	if err != nil {
+		log.Println("Error reading assignment file:", err.Error())
+		return
+	}
+
+	// Update Super Ninja health
+	if superNinja.Health == 0 {
+		healthRange := ninja.MAX_HEALTH - ninja.MIN_HEALTH
+		superNinja.Health = common.GenerateFloat64Vals(healthRange, ninja.MIN_HEALTH)
+	}
 
 	startMission(startTime)
 	defer endMission(startTime)
 
-	// Create Targets
-	targetList := []ninja.Ninja{}
+	for _, target := range targetList {
+		log.Println(superNinja.Name, "out to eliminate", target.Name)
+		eliminateTarget(superNinja, &target)
 
-	// Target 1 - Jon Doe
-	target := createNinja("Jon Doe", "Staff")
-	log.Println("Created ninja target:", target.Name, "ID:", target.ID)
-	targetList = addTarget(target, targetList)
-
-	// Target 2 - Perry Mason
-	target = createNinja("Perry Mason", "Kunai")
-	log.Println("Created ninja target:", target.Name, "ID:", target.ID)
-	targetList = addTarget(target, targetList)
-
-	// Target 3 - Jon Smith
-	target = createNinja("Jon Smith", "Star")
-	log.Println("Created ninja target:", target.Name, "ID:", target.ID)
-	targetList = addTarget(target, targetList)
-
-	// Target 4 - Curly Joe
-	target = createNinja("Curly Joe", "Star")
-	log.Println("Created ninja target:", target.Name, "ID:", target.ID)
-	targetList = addTarget(target, targetList)
-
-	targetsSize = len(targetList)
-	manageTargets(superNinja, targetList)
-
-	wg.Wait()
-
-	if nTargetsEliminated == targetsSize {
-		log.Println("All targets eliminated -- Mission complete!")
-	}
-}
-
-func addTarget(target *ninja.Ninja, targetList interface{}) []ninja.Ninja {
-	tl := targetList.([]ninja.Ninja)
-	tl = append(tl, *target)
-
-	return tl
-}
-
-func manageTargets(sn *ninja.Ninja, targetList []ninja.Ninja) {
-	// Attack targets
-	targetIdx := 0
-
-	for targetIdx < targetsSize {
-		// Get current target info
-		target := targetList[targetIdx]
-
-		// Update wg counter
-		wg.Add(WG_GO_Rountine_Cnt)
-
-		// launch thread-like function to handling attacks
-		go underTakeTarget(sn, &target)
-
-		// Advance to the next target
-		targetIdx++
-	}
-}
-
-func underTakeTarget(sn *ninja.Ninja, target *ninja.Ninja) {
-	defer wg.Done()
-
-	snOnce := func() {
-		log.Println("Super Ninja", sn.Name, "has been eliminated.")
-		sn.Eliminated = true
-	}
-
-	for {
-		if !target.Acquired {
-			target.Acquired = acquire()
-
-			if target.Acquired {
-				log.Println("Target:", target.Name, "has been acquired")
-			} else {
-				log.Println("Searching for", target.Name+"...")
-			}
-		}
-
-		// Handle targets that have yet to be eliminated
-		if !target.Eliminated {
-			if target.Acquired {
-				log.Println()
-				log.Println(sn.Name, "has", sn.Health, "units of health")
-				log.Println(sn.Name, "attacking", target.Name)
-				log.Println(target.Name, "has", target.Health, "units of health")
-				log.Println()
-
-				// Attack target once acquired
-				attack(sn, target)
-
-				log.Println()
-				log.Println(sn.Name, "attack resulted in the following updated stats")
-				log.Println(target.Name, "has", target.Health, "units of health")
-				log.Println(sn.Name, "has", sn.Health, "units of health")
-				log.Println()
-
-				// Determine if super ninja has been eliminated
-				if sn.Health <= 0 {
-					once.Do(snOnce)
-					break
-				}
-
-				// Increment targets eliminated counter
-				if target.Health <= 0 {
-					log.Println("Target:", target.Name, "has been eliminated.")
-					target.Eliminated = true
-					nTargetsEliminated++
-					if nTargetsEliminated == targetsSize {
-						break
-					}
-				}
-			} else {
-				log.Println("Waiting for", target.Name, "to be acquired...")
-				time.Sleep(time.Millisecond * time.Duration(ninja.ACQUIRE_PAUSE))
-			}
-		} else {
-			log.Println(target.Name, "has been eliminated.")
+		// If super ninja is eliminated end mission fails
+		if superNinja.Eliminated {
+			log.Println(superNinja.Name, "has been eliminated - mission failed")
 			break
 		}
 	}
+
 }
 
-func acquire() bool {
-	// Acquire target
-	acquireTargetVal := common.GenerateFloat64Vals(float64(ninja.ACQUIRE_TARGET_RANGE), float64(ninja.ACQUIRE_TARGET_MIN))
-	if ninja.AcquisitionType(acquireTargetVal) > ninja.ACQUIRE_TARGET_SUCCESS_MIN && ninja.AcquisitionType(acquireTargetVal) < ninja.ACQUIRE_TARGET_SUCCESS_MAX {
-		// Target has been acquired
-		return true
+func eliminateTarget(sn *ninja.SuperNinja, target *ninja.TargetNinja) {
+	log.Println(sn.Name, "found", target.Name)
+
+	for {
+		time.Sleep(time.Millisecond * time.Duration(waitDuration))
+
+		// Attack target
+		attack(sn, target)
+
+		log.Println(sn.Name, "health =", sn.Health)
+		if sn.Health <= 0 {
+			sn.Eliminated = true
+			break
+		}
+
+		log.Println(target.Name, "health =", target.Health)
+		if target.Health <= 0 {
+			log.Println(target.Name, "eliminated!")
+			target.Eliminated = true
+			break
+		} else {
+			time.Sleep(time.Millisecond * time.Duration(waitDuration))
+		}
 	}
-
-	return false
 }
 
-func attack(sn *ninja.Ninja, target *ninja.Ninja) {
+func attack(sn *ninja.SuperNinja, target *ninja.TargetNinja) {
 	// Super Ninja attacks target
 	weaponDamage := common.GenerateFloat64Vals(sn.Weapon_Strength, ninja.WEAPON_STRENGTH_MIN)
 
 	// Pause in the action
-	log.Println("Pause after attack...")
 	time.Sleep(time.Millisecond * time.Duration(ninja.ATTACK_PAUSE))
 
 	// Target response
-	attackDamage, snAttackDamage := targetResponse(target, sn, weaponDamage)
+	attackDamage, snAttackDamage := targetResponse(sn, target, weaponDamage)
 
 	// Pause in the action
-	log.Println("Pause after response...")
 	time.Sleep(time.Millisecond * time.Duration(ninja.RESPONSE_PAUSE))
 
 	// Update Health for compatents
@@ -179,7 +86,7 @@ func attack(sn *ninja.Ninja, target *ninja.Ninja) {
 	target.Health += attackDamage
 }
 
-func targetResponse(tn *ninja.Ninja, sn *ninja.Ninja, weaponDamage float64) (float64, float64) {
+func targetResponse(sn *ninja.SuperNinja, tn *ninja.TargetNinja, weaponDamage float64) (float64, float64) {
 	// Response type
 	responseType := ninja.ResponseType(common.GenerateIntVals(ninja.RT_Count, ninja.RT_Count_Min))
 
@@ -234,14 +141,9 @@ func targetResponse(tn *ninja.Ninja, sn *ninja.Ninja, weaponDamage float64) (flo
 	return attackDamage, snAttackDamage
 }
 
-func createNinja(name string, weapon string) *ninja.Ninja {
-	en := new(ninja.Ninja)
+func createNinja(name string, weapon string) *ninja.SuperNinja {
+	en := new(ninja.SuperNinja)
 
-	// Since Golang does NOT have a pre-increment operator,
-	// We increment the variable before assigning the variable
-	lastIDUsed++
-
-	en.ID = lastIDUsed
 	en.Name = name
 	en.Weapon = weapon
 	en.Weapon_Strength = common.GenerateFloat64Vals(ninja.MAX_WEAPON-ninja.MIN_WEAPON, ninja.MIN_WEAPON)
